@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mini Golf V2</title>
+    <title>Mini Golf V2.1</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
         
@@ -18,9 +18,19 @@
         
         /* LOBBY STYLES */
         #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #27ae60; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
-        input, button { padding: 15px; margin: 10px; font-size: 1.2rem; border-radius: 10px; border: none; width: 80%; max-width: 300px; font-family: inherit; }
-        button { background: #f39c12; color: white; cursor: pointer; box-shadow: 0 4px 0 #d35400; transition: transform 0.1s; }
+        
+        /* Form Elements */
+        input, select, button { padding: 15px; margin: 8px; font-size: 1.2rem; border-radius: 10px; border: none; width: 80%; max-width: 300px; font-family: inherit; box-sizing: border-box; }
+        
+        /* Specific Styles */
+        input { background: rgba(255,255,255,0.9); color: #333; }
+        select { background: rgba(255,255,255,0.9); color: #333; cursor: pointer; }
+        button { background: #f39c12; color: white; cursor: pointer; box-shadow: 0 4px 0 #d35400; transition: transform 0.1s; font-weight: bold; }
         button:active { transform: translateY(4px); box-shadow: none; }
+        
+        /* Separator */
+        .divider { color: rgba(255,255,255,0.7); margin: 10px 0; font-size: 0.9rem; }
+        
         .hidden { display: none !important; }
 
         canvas { display: block; width: 100%; height: 100%; }
@@ -29,18 +39,32 @@
 <body>
 
     <div id="lobby">
-        <h1 style="color:white; font-size: 3rem; text-shadow: 3px 3px 0 #000;">GOLF PARTY</h1>
-        <input type="text" id="pName" placeholder="Nickname">
-        <div id="start-buttons">
-            <button onclick="createRoom()">Create New Room</button>
-            <div style="color:white; margin:10px;">OR</div>
-            <input type="text" id="rCode" placeholder="Room Code" style="text-transform:uppercase;">
-            <button onclick="joinRoom()">Join Room</button>
+        <h1 style="color:white; font-size: 3rem; text-shadow: 3px 3px 0 #000; margin-bottom: 20px;">GOLF PARTY</h1>
+        
+        <input type="text" id="pName" placeholder="Your Nickname">
+        
+        <div id="start-buttons" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+            
+            <div class="divider">--- CREATE ROOM ---</div>
+            
+            <select id="playerCount">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+            </select>
+            
+            <button onclick="createRoom()">Create Room</button>
+            
+            <div class="divider">--- OR JOIN ROOM ---</div>
+            
+            <input type="text" id="rCode" placeholder="Enter Room Code" style="text-transform:uppercase;">
+            <button onclick="joinRoom()" style="background: #3498db; box-shadow: 0 4px 0 #2980b9;">Join Room</button>
         </div>
-        <div id="waiting-area" class="hidden">
-            <h2 style="color:white">Room: <span id="room-display"></span></h2>
-            <div id="player-list" style="color:white; font-size: 1.2rem; margin-bottom: 20px;"></div>
-            <div style="color:white">Waiting for players...</div>
+
+        <div id="waiting-area" class="hidden" style="text-align: center;">
+            <h2 style="color:white; font-size: 2rem;">Room: <span id="room-display" style="color: #f1c40f;"></span></h2>
+            <div id="player-list" style="color:white; font-size: 1.4rem; margin: 20px 0;"></div>
+            <div style="color:rgba(255,255,255,0.7); animation: pulse 1s infinite;">Waiting for players...</div>
         </div>
     </div>
 
@@ -105,14 +129,24 @@
 
         // --- LOBBY LOGIC ---
         function createRoom() {
-            const name = document.getElementById('pName').value || 'Player';
-            socket.emit('create_room', { maxPlayers: 4 }); // Fixed 4 for now
+            const name = document.getElementById('pName').value.trim();
+            if(!name) return alert("Please enter a name!");
+            
+            // GET PLAYER COUNT
+            const count = document.getElementById('playerCount').value;
+            
+            socket.emit('create_room', { maxPlayers: count, name: name }); // Added name to create event if needed
+            // Note: We join immediately after creating, but for UI we wait
             waitForLobby(name);
         }
 
         function joinRoom() {
-            const name = document.getElementById('pName').value || 'Player';
+            const name = document.getElementById('pName').value.trim();
             const code = document.getElementById('rCode').value.toUpperCase();
+            
+            if(!name) return alert("Please enter a name!");
+            if(!code) return alert("Please enter a room code!");
+
             roomId = code;
             socket.emit('join_room', { roomId: code, name: name });
             waitForLobby(name);
@@ -121,12 +155,22 @@
         function waitForLobby(name) {
             document.getElementById('start-buttons').classList.add('hidden');
             document.getElementById('waiting-area').classList.remove('hidden');
+            document.getElementById('pName').blur(); // Hide keyboard
         }
 
-        socket.on('room_created', (id) => { roomId = id; document.getElementById('room-display').innerText = id; });
+        socket.on('room_created', (id) => { 
+            roomId = id; 
+            document.getElementById('room-display').innerText = id; 
+            // After creating, the server expects us to join our own room
+            const name = document.getElementById('pName').value;
+            socket.emit('join_room', { roomId: id, name: name });
+        });
         
         socket.on('update_lobby', (pList) => {
-            document.getElementById('player-list').innerHTML = pList.map(p => `<div>⛳ ${p.name}</div>`).join('');
+            document.getElementById('player-list').innerHTML = pList.map(p => `
+                <div style="background:rgba(0,0,0,0.3); padding:10px; margin:5px; border-radius:8px;">
+                    <span style="color:${p.color}">●</span> ${p.name}
+                </div>`).join('');
         });
 
         socket.on('game_start', (data) => {
@@ -147,14 +191,13 @@
             if(p) {
                 p.vx = data.vx;
                 p.vy = data.vy;
-                if(data.id === myId) ball.vx = data.vx; ball.vy = data.vy; // Sync my local physics var
-                isMoving = true; // Start physics loop
+                if(data.id === myId) { ball.vx = data.vx; ball.vy = data.vy; }
+                isMoving = true; 
             }
         });
 
         socket.on('change_turn', (data) => {
             currentTurnId = data.turnId;
-            // Sync all positions to match server exactly (prevents drift)
             players = data.players;
             updateTurnUI();
         });
@@ -175,10 +218,12 @@
             if(currentTurnId === myId) {
                 div.innerText = "⭐ YOUR TURN! ⭐";
                 div.style.color = "#f1c40f";
+                div.style.transform = "scale(1.1)";
             } else {
                 const p = players.find(pl => pl.id === currentTurnId);
                 div.innerText = `Waiting for ${p ? p.name : '...'}`;
                 div.style.color = "#ecf0f1";
+                div.style.transform = "scale(1)";
             }
         }
 
@@ -188,17 +233,15 @@
 
         function handleStart(e) {
             if(isMoving || currentTurnId !== myId) return;
-            // Check if clicking near my ball
             const myPlayer = players.find(p => p.id === myId);
-            if(myPlayer.finished) return;
+            if(!myPlayer || myPlayer.finished) return;
 
-            // Convert Screen Click to Virtual Coords
             const cx = (e.clientX - offsetX) / scale;
             const cy = (e.clientY - offsetY) / scale;
             
             const dist = Math.hypot(cx - myPlayer.x, cy - myPlayer.y);
             
-            if(dist < 50) { // Allow clicking somewhat near ball
+            if(dist < 80) { // Increased hit area for easier touch
                 dragStart = { x: cx, y: cy };
                 dragCurrent = { x: cx, y: cy };
             }
@@ -221,11 +264,9 @@
         function handleEnd() {
             if(!dragStart) return;
             
-            // Aiming Logic (Pull back like slingshot)
             let dx = dragStart.x - dragCurrent.x;
             let dy = dragStart.y - dragCurrent.y;
             
-            // Power Cap
             const power = Math.hypot(dx, dy);
             const maxPower = 150; 
             if(power > maxPower) {
@@ -234,7 +275,6 @@
                 dy *= ratio;
             }
 
-            // Shoot if pulled enough
             if(power > 10) {
                 const speedMult = 0.15;
                 socket.emit('shoot', { roomId, vx: dx * speedMult, vy: dy * speedMult });
@@ -251,9 +291,8 @@
             let movingCount = 0;
 
             players.forEach(p => {
-                if(p.finished) { p.x = -500; return; } // Hide finished players
+                if(p.finished) { p.x = -500; return; } 
 
-                // Apply Velocity
                 if(Math.abs(p.vx) > 0.05 || Math.abs(p.vy) > 0.05) {
                     p.x += p.vx;
                     p.y += p.vy;
@@ -261,7 +300,6 @@
                     p.vy *= friction;
                     movingCount++;
 
-                    // 1. Wall Collisions
                     // Screen Bounds
                     if(p.x < 10) { p.x = 10; p.vx *= -1; }
                     if(p.x > VW-10) { p.x = VW-10; p.vx *= -1; }
@@ -270,32 +308,28 @@
 
                     // Map Walls
                     map.walls.forEach(w => {
-                        // Simple AABB Collision
                         if(p.x > w.x - 10 && p.x < w.x + w.w + 10 &&
                            p.y > w.y - 10 && p.y < w.y + w.h + 10) {
                             
-                            // Determine side of collision (Simplified)
                             const cx = w.x + w.w/2;
                             const cy = w.y + w.h/2;
                             const dx = p.x - cx;
                             const dy = p.y - cy;
-                            
-                            // Normalize to wall aspect
                             const aspect = w.w / w.h;
+
                             if(Math.abs(dx) > Math.abs(dy) * aspect) {
-                                p.vx *= -1; // Side hit
-                                p.x += (dx > 0 ? 2 : -2); // Push out
+                                p.vx *= -1; 
+                                p.x += (dx > 0 ? 2 : -2);
                             } else {
-                                p.vy *= -1; // Top/Bottom hit
+                                p.vy *= -1; 
                                 p.y += (dy > 0 ? 2 : -2);
                             }
                         }
                     });
 
-                    // 2. Hole Detection
+                    // Hole Detection
                     const distHole = Math.hypot(p.x - map.hole.x, p.y - map.hole.y);
                     if(distHole < map.hole.radius) {
-                        // In hole!
                         p.vx = 0; p.vy = 0;
                         p.finished = true;
                         if(p.id === myId) {
@@ -304,15 +338,12 @@
                         }
                     }
                 } else {
-                    // Stop completely
                     p.vx = 0; p.vy = 0;
                 }
             });
 
-            // Turn End Logic (Client triggers server when stopped)
             if(isMoving && movingCount === 0) {
                 isMoving = false;
-                // Only the active player tells server "I am done"
                 if(currentTurnId === myId) {
                     const me = players.find(p => p.id === myId);
                     socket.emit('turn_complete', { roomId, x: me.x, y: me.y });
@@ -322,22 +353,18 @@
 
         // --- RENDERING ---
         function draw() {
-            // Clear Screen (Grey Background)
             ctx.fillStyle = '#2c3e50';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             if(!map) return;
 
-            // Save context for Virtual Coordinates scaling
             ctx.save();
             ctx.translate(offsetX, offsetY);
             ctx.scale(scale, scale);
 
-            // 1. Draw Board Background (Grass)
-            ctx.fillStyle = '#27ae60'; // Base Grass
+            // Background
+            ctx.fillStyle = '#27ae60'; 
             ctx.fillRect(0, 0, VW, VH);
-            
-            // Checkerboard Pattern (Classic Golf Look)
             ctx.fillStyle = '#2ecc71';
             for(let r=0; r<20; r++) {
                 for(let c=0; c<10; c++) {
@@ -345,53 +372,45 @@
                 }
             }
 
-            // 2. Draw Walls (3D Effect)
+            // Walls
             map.walls.forEach(w => {
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.fillRect(w.x+5, w.y+5, w.w, w.h);
-                // Top
-                ctx.fillStyle = '#d35400'; // Brick Red
+                ctx.fillStyle = '#d35400'; 
                 ctx.fillRect(w.x, w.y, w.w, w.h);
-                // Border
                 ctx.strokeStyle = '#a04000';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(w.x, w.y, w.w, w.h);
             });
 
-            // 3. Draw Hole
+            // Hole
             ctx.fillStyle = '#1a1a1a';
             ctx.beginPath();
             ctx.arc(map.hole.x, map.hole.y, map.hole.radius, 0, Math.PI*2);
             ctx.fill();
-            // Hole Ring
             ctx.strokeStyle = '#bdc3c7';
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // 4. Draw Players
+            // Players
             players.forEach(p => {
                 if(p.finished) return;
 
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.4)';
                 ctx.beginPath();
                 ctx.arc(p.x+2, p.y+2, 10, 0, Math.PI*2);
                 ctx.fill();
 
-                // Ball
                 ctx.fillStyle = p.color;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
                 ctx.fill();
                 
-                // Highlight (Shiny ball)
                 ctx.fillStyle = 'rgba(255,255,255,0.4)';
                 ctx.beginPath();
                 ctx.arc(p.x-3, p.y-3, 4, 0, Math.PI*2);
                 ctx.fill();
 
-                // Active Indicator
                 if(p.id === currentTurnId) {
                     ctx.strokeStyle = 'white';
                     ctx.lineWidth = 2;
@@ -401,39 +420,35 @@
                 }
             });
 
-            // 5. Draw Aiming (Only if my turn and dragging)
+            // Aiming Lines
             if(dragStart && currentTurnId === myId && !isMoving) {
                 const me = players.find(p => p.id === myId);
-                
                 let dx = dragStart.x - dragCurrent.x;
                 let dy = dragStart.y - dragCurrent.y;
                 
-                // A. Power Line (Drag Back)
+                // Power
                 ctx.beginPath();
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 3;
                 ctx.moveTo(me.x, me.y);
-                ctx.lineTo(me.x - dx, me.y - dy); // Reverse visual for drag-back feel
+                ctx.lineTo(me.x - dx, me.y - dy); 
                 ctx.stroke();
 
-                // B. Trajectory Line (Forward Prediction)
+                // Trajectory
                 ctx.beginPath();
                 ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-                ctx.setLineDash([5, 5]); // Dashed line
+                ctx.setLineDash([5, 5]); 
                 ctx.moveTo(me.x, me.y);
-                ctx.lineTo(me.x + dx * 3, me.y + dy * 3); // Show projected path
+                ctx.lineTo(me.x + dx * 3, me.y + dy * 3); 
                 ctx.stroke();
-                ctx.setLineDash([]); // Reset
+                ctx.setLineDash([]); 
             }
 
-            // Restore context (End of Virtual Coords)
             ctx.restore();
             
-            // Draw Borders to hide messy edges
+            // Borders
             ctx.fillStyle = '#222';
-            // Left
             ctx.fillRect(0, 0, offsetX, canvas.height);
-            // Right
             ctx.fillRect(offsetX + VW*scale, 0, offsetX, canvas.height);
         }
 
