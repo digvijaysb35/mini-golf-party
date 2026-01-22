@@ -3,292 +3,444 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mini Golf Party</title>
+    <title>Mini Golf V2</title>
     <style>
-        body { font-family: 'Arial', sans-serif; background: #2c3e50; color: white; margin: 0; overflow: hidden; touch-action: none; }
-        #lobby { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        input, select, button { padding: 15px; margin: 10px; font-size: 1.2rem; border-radius: 8px; border: none; width: 80%; max-width: 300px; }
-        button { background: #27ae60; color: white; font-weight: bold; cursor: pointer; }
-        button:active { transform: scale(0.95); }
-        #gameArea { display: none; position: relative; width: 100%; height: 100vh; background: #2ecc71; }
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        
+        body { margin: 0; background: #222; overflow: hidden; font-family: 'Fredoka One', cursive; touch-action: none; }
+        
+        /* UI OVERLAY */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        .panel { background: rgba(0,0,0,0.6); color: white; padding: 10px 20px; border-radius: 20px; margin: 10px; text-align: center; backdrop-filter: blur(5px); }
+        #top-bar { display: flex; justify-content: space-between; align-items: center; }
+        #turn-indicator { font-size: 1.5rem; color: #f1c40f; text-shadow: 2px 2px 0 #000; }
+        
+        /* LOBBY STYLES */
+        #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #27ae60; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        input, button { padding: 15px; margin: 10px; font-size: 1.2rem; border-radius: 10px; border: none; width: 80%; max-width: 300px; font-family: inherit; }
+        button { background: #f39c12; color: white; cursor: pointer; box-shadow: 0 4px 0 #d35400; transition: transform 0.1s; }
+        button:active { transform: translateY(4px); box-shadow: none; }
+        .hidden { display: none !important; }
+
         canvas { display: block; width: 100%; height: 100%; }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; padding: 10px; }
-        .player-tag { background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
-        <h1>⛳ Mini Golf Party</h1>
-        <input type="text" id="playerName" placeholder="Enter Your Name">
-        
-        <div id="createSection">
-            <h3>Create Room</h3>
-            <select id="playerCount">
-                <option value="2">2 Players</option>
-                <option value="3">3 Players</option>
-                <option value="4">4 Players</option>
-            </select>
-            <button onclick="createRoom()">Create Room</button>
-        </div>
-
-        <div id="joinSection">
-            <h3>Join Room</h3>
-            <input type="text" id="roomCode" placeholder="Room Code">
+        <h1 style="color:white; font-size: 3rem; text-shadow: 3px 3px 0 #000;">GOLF PARTY</h1>
+        <input type="text" id="pName" placeholder="Nickname">
+        <div id="start-buttons">
+            <button onclick="createRoom()">Create New Room</button>
+            <div style="color:white; margin:10px;">OR</div>
+            <input type="text" id="rCode" placeholder="Room Code" style="text-transform:uppercase;">
             <button onclick="joinRoom()">Join Room</button>
         </div>
-        <p id="status"></p>
+        <div id="waiting-area" class="hidden">
+            <h2 style="color:white">Room: <span id="room-display"></span></h2>
+            <div id="player-list" style="color:white; font-size: 1.2rem; margin-bottom: 20px;"></div>
+            <div style="color:white">Waiting for players...</div>
+        </div>
     </div>
 
-    <div id="gameArea">
-        <div id="ui-layer">
-            <div id="roundInfo">Round 1/5 | Par 3</div>
-            <div id="scoreboard">Waiting...</div>
+    <div id="ui-layer" class="hidden">
+        <div id="top-bar">
+            <div class="panel" id="round-display">Round 1</div>
+            <div class="panel" id="score-display">Par 3</div>
         </div>
-        <canvas id="gameCanvas"></canvas>
+        <div style="text-align: center; margin-bottom: 50px;">
+            <div id="turn-indicator">Waiting...</div>
+        </div>
     </div>
+
+    <canvas id="gameCanvas"></canvas>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const lobby = document.getElementById('lobby');
-        const gameArea = document.getElementById('gameArea');
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game State
+        // GAME CONSTANTS
+        const VW = 400; // Virtual Width
+        const VH = 800; // Virtual Height
+        
+        let scale = 1; 
+        let offsetX = 0; 
+        let offsetY = 0;
+
+        // STATE
         let myId = null;
         let roomId = null;
-        let players = {};
+        let players = [];
         let map = null;
-        let isMyTurn = true; // Simplified: Everyone shoots simultaneously
-        let myBall = { x: 0, y: 0, vx: 0, vy: 0, radius: 10, friction: 0.97 };
+        let currentTurnId = null;
         let isMoving = false;
         
-        // Touch Input
-        let dragStart = { x: 0, y: 0 };
-        let isDragging = false;
+        // PHYSICS
+        let ball = { vx: 0, vy: 0 };
+        let friction = 0.96;
 
-        // Resize Canvas
+        // INPUT
+        let dragStart = null;
+        let dragCurrent = null;
+
+        // --- SETUP & RESIZE ---
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            
+            // Calculate Scale to fit Virtual Aspect Ratio
+            let scaleX = canvas.width / VW;
+            let scaleY = canvas.height / VH;
+            scale = Math.min(scaleX, scaleY); // Fit within screen
+            
+            // Center the board
+            offsetX = (canvas.width - (VW * scale)) / 2;
+            offsetY = (canvas.height - (VH * scale)) / 2;
         }
         window.addEventListener('resize', resize);
         resize();
 
-        // --- LOBBY FUNCTIONS ---
+        // --- LOBBY LOGIC ---
         function createRoom() {
-            const name = document.getElementById('playerName').value;
-            if(!name) return alert("Enter name!");
-            const max = document.getElementById('playerCount').value;
-            socket.emit('create_room', { maxPlayers: max });
-            document.getElementById('status').innerText = "Creating...";
-            
-            // Auto join after create
-            socket.once('room_created', (id) => {
-                roomId = id;
-                document.getElementById('roomCode').value = id; // Show code to user
-                joinRoom(true); 
-                alert("Room Created! Code: " + id);
-            });
+            const name = document.getElementById('pName').value || 'Player';
+            socket.emit('create_room', { maxPlayers: 4 }); // Fixed 4 for now
+            waitForLobby(name);
         }
 
-        function joinRoom(auto = false) {
-            const name = document.getElementById('playerName').value;
-            const code = document.getElementById('roomCode').value;
-            if(!name || !code) return alert("Fill all fields");
-            
-            if(!auto) roomId = code;
+        function joinRoom() {
+            const name = document.getElementById('pName').value || 'Player';
+            const code = document.getElementById('rCode').value.toUpperCase();
+            roomId = code;
             socket.emit('join_room', { roomId: code, name: name });
+            waitForLobby(name);
         }
 
-        socket.on('update_players', (p) => {
-            players = p;
-            document.getElementById('status').innerText = `Players: ${Object.keys(p).length} (Waiting for full room...)`;
+        function waitForLobby(name) {
+            document.getElementById('start-buttons').classList.add('hidden');
+            document.getElementById('waiting-area').classList.remove('hidden');
+        }
+
+        socket.on('room_created', (id) => { roomId = id; document.getElementById('room-display').innerText = id; });
+        
+        socket.on('update_lobby', (pList) => {
+            document.getElementById('player-list').innerHTML = pList.map(p => `<div>⛳ ${p.name}</div>`).join('');
         });
 
         socket.on('game_start', (data) => {
-            lobby.style.display = 'none';
-            gameArea.style.display = 'block';
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('ui-layer').classList.remove('hidden');
+            
             myId = socket.id;
             map = data.map;
             players = data.players;
-            
-            // Set initial pos
-            myBall.x = map.start.x / 400 * canvas.width; // Scale to screen
-            myBall.y = map.start.y / 800 * canvas.height;
-            
-            gameLoop();
+            currentTurnId = data.turnId;
+            updateTurnUI();
+            requestAnimationFrame(loop);
+        });
+
+        // --- GAME EVENTS ---
+        socket.on('player_shot', (data) => {
+            const p = players.find(pl => pl.id === data.id);
+            if(p) {
+                p.vx = data.vx;
+                p.vy = data.vy;
+                if(data.id === myId) ball.vx = data.vx; ball.vy = data.vy; // Sync my local physics var
+                isMoving = true; // Start physics loop
+            }
+        });
+
+        socket.on('change_turn', (data) => {
+            currentTurnId = data.turnId;
+            // Sync all positions to match server exactly (prevents drift)
+            players = data.players;
+            updateTurnUI();
         });
         
         socket.on('next_round', (data) => {
-             map = data.map;
-             players = data.players;
-             myBall.x = map.start.x / 400 * canvas.width;
-             myBall.y = map.start.y / 800 * canvas.height;
-             myBall.vx = 0; myBall.vy = 0;
-             document.getElementById('roundInfo').innerText = `Round ${map.round}/5 | Par ${map.maxShots}`;
+            map = data.map;
+            players = data.players;
+            currentTurnId = data.turnId;
+            document.getElementById('round-display').innerText = "Round " + map.round;
+            isMoving = false;
+            updateTurnUI();
         });
 
-        socket.on('player_shot', (data) => {
-            if(players[data.id]) {
-                players[data.id].vx = data.vx;
-                players[data.id].vy = data.vy;
+        socket.on('msg', (msg) => { alert(msg); });
+
+        function updateTurnUI() {
+            const div = document.getElementById('turn-indicator');
+            if(currentTurnId === myId) {
+                div.innerText = "⭐ YOUR TURN! ⭐";
+                div.style.color = "#f1c40f";
+            } else {
+                const p = players.find(pl => pl.id === currentTurnId);
+                div.innerText = `Waiting for ${p ? p.name : '...'}`;
+                div.style.color = "#ecf0f1";
             }
-        });
-        
-        socket.on('update_pos', (data) => {
-            if(players[data.id] && data.id !== myId) {
-                // Lerp could be used here for smoothness, direct set for now
-                players[data.id].x = data.x;
-                players[data.id].y = data.y;
+        }
+
+        // --- INPUT (AIMING) ---
+        canvas.addEventListener('touchstart', (e) => handleStart(e.touches[0]));
+        canvas.addEventListener('mousedown', (e) => handleStart(e));
+
+        function handleStart(e) {
+            if(isMoving || currentTurnId !== myId) return;
+            // Check if clicking near my ball
+            const myPlayer = players.find(p => p.id === myId);
+            if(myPlayer.finished) return;
+
+            // Convert Screen Click to Virtual Coords
+            const cx = (e.clientX - offsetX) / scale;
+            const cy = (e.clientY - offsetY) / scale;
+            
+            const dist = Math.hypot(cx - myPlayer.x, cy - myPlayer.y);
+            
+            if(dist < 50) { // Allow clicking somewhat near ball
+                dragStart = { x: cx, y: cy };
+                dragCurrent = { x: cx, y: cy };
             }
-        });
+        }
 
-        // --- GAME LOOP ---
-        canvas.addEventListener('touchstart', (e) => {
-            if(isMoving) return;
-            isDragging = true;
-            dragStart.x = e.touches[0].clientX;
-            dragStart.y = e.touches[0].clientY;
-        });
+        window.addEventListener('touchmove', (e) => handleMove(e.touches[0]));
+        window.addEventListener('mousemove', (e) => handleMove(e));
 
-        canvas.addEventListener('touchend', (e) => {
-            if(!isDragging) return;
-            isDragging = false;
-            let endX = e.changedTouches[0].clientX;
-            let endY = e.changedTouches[0].clientY;
+        function handleMove(e) {
+            if(!dragStart) return;
+            dragCurrent = { 
+                x: (e.clientX - offsetX) / scale,
+                y: (e.clientY - offsetY) / scale 
+            };
+        }
+
+        window.addEventListener('touchend', handleEnd);
+        window.addEventListener('mouseup', handleEnd);
+
+        function handleEnd() {
+            if(!dragStart) return;
             
-            // Power calculation
-            let powerX = (dragStart.x - endX) * 0.15;
-            let powerY = (dragStart.y - endY) * 0.15;
+            // Aiming Logic (Pull back like slingshot)
+            let dx = dragStart.x - dragCurrent.x;
+            let dy = dragStart.y - dragCurrent.y;
             
-            // Cap speed
-            if(powerX > 20) powerX = 20; if(powerX < -20) powerX = -20;
-            if(powerY > 20) powerY = 20; if(powerY < -20) powerY = -20;
+            // Power Cap
+            const power = Math.hypot(dx, dy);
+            const maxPower = 150; 
+            if(power > maxPower) {
+                const ratio = maxPower / power;
+                dx *= ratio;
+                dy *= ratio;
+            }
 
-            myBall.vx = powerX;
-            myBall.vy = powerY;
-            isMoving = true;
+            // Shoot if pulled enough
+            if(power > 10) {
+                const speedMult = 0.15;
+                socket.emit('shoot', { roomId, vx: dx * speedMult, vy: dy * speedMult });
+            }
             
-            socket.emit('shoot', { roomId, vx: powerX, vy: powerY });
-        });
+            dragStart = null;
+            dragCurrent = null;
+        }
 
+        // --- PHYSICS ENGINE ---
         function update() {
             if(!map) return;
             
-            // Scale factors
-            let scaleX = canvas.width / 400;
-            let scaleY = canvas.height / 800;
+            let movingCount = 0;
 
-            // My Physics
-            if(isMoving) {
-                myBall.x += myBall.vx;
-                myBall.y += myBall.vy;
-                myBall.vx *= myBall.friction;
-                myBall.vy *= myBall.friction;
+            players.forEach(p => {
+                if(p.finished) { p.x = -500; return; } // Hide finished players
 
-                // Stop check
-                if(Math.abs(myBall.vx) < 0.1 && Math.abs(myBall.vy) < 0.1) {
-                    isMoving = false;
-                    myBall.vx = 0; myBall.vy = 0;
-                    socket.emit('sync_pos', { roomId, x: myBall.x, y: myBall.y });
-                }
+                // Apply Velocity
+                if(Math.abs(p.vx) > 0.05 || Math.abs(p.vy) > 0.05) {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vx *= friction;
+                    p.vy *= friction;
+                    movingCount++;
 
-                // Wall Collision (Screen borders)
-                if(myBall.x < 0 || myBall.x > canvas.width) myBall.vx *= -1;
-                if(myBall.y < 0 || myBall.y > canvas.height) myBall.vy *= -1;
-                
-                // Obstacle Collision
-                map.obstacles.forEach(obs => {
-                    let ox = obs.x * scaleX;
-                    let oy = obs.y * scaleY;
-                    let ow = obs.w * scaleX;
-                    let oh = obs.h * scaleY;
-                    
-                    if (myBall.x > ox && myBall.x < ox + ow && myBall.y > oy && myBall.y < oy + oh) {
-                         myBall.vx *= -1;
-                         myBall.vy *= -1;
+                    // 1. Wall Collisions
+                    // Screen Bounds
+                    if(p.x < 10) { p.x = 10; p.vx *= -1; }
+                    if(p.x > VW-10) { p.x = VW-10; p.vx *= -1; }
+                    if(p.y < 10) { p.y = 10; p.vy *= -1; }
+                    if(p.y > VH-10) { p.y = VH-10; p.vy *= -1; }
+
+                    // Map Walls
+                    map.walls.forEach(w => {
+                        // Simple AABB Collision
+                        if(p.x > w.x - 10 && p.x < w.x + w.w + 10 &&
+                           p.y > w.y - 10 && p.y < w.y + w.h + 10) {
+                            
+                            // Determine side of collision (Simplified)
+                            const cx = w.x + w.w/2;
+                            const cy = w.y + w.h/2;
+                            const dx = p.x - cx;
+                            const dy = p.y - cy;
+                            
+                            // Normalize to wall aspect
+                            const aspect = w.w / w.h;
+                            if(Math.abs(dx) > Math.abs(dy) * aspect) {
+                                p.vx *= -1; // Side hit
+                                p.x += (dx > 0 ? 2 : -2); // Push out
+                            } else {
+                                p.vy *= -1; // Top/Bottom hit
+                                p.y += (dy > 0 ? 2 : -2);
+                            }
+                        }
+                    });
+
+                    // 2. Hole Detection
+                    const distHole = Math.hypot(p.x - map.hole.x, p.y - map.hole.y);
+                    if(distHole < map.hole.radius) {
+                        // In hole!
+                        p.vx = 0; p.vy = 0;
+                        p.finished = true;
+                        if(p.id === myId) {
+                            socket.emit('hole_in', { roomId });
+                            socket.emit('turn_complete', { roomId, x: p.x, y: p.y });
+                        }
                     }
-                });
-
-                // Hole Check
-                let hx = map.hole.x * scaleX;
-                let hy = map.hole.y * scaleY;
-                let dist = Math.hypot(myBall.x - hx, myBall.y - hy);
-                if(dist < 20) {
-                    // Success!
-                    myBall.vx = 0; myBall.vy = 0;
-                    myBall.x = -100; // Hide ball
-                    socket.emit('hole_in', { roomId, shots: 1 }); // Simplification: Sending 1 shot per successful logic usually requires local counter
-                    alert("Hole in one! (Or close enough)");
+                } else {
+                    // Stop completely
+                    p.vx = 0; p.vy = 0;
                 }
-            }
-            
-            // Update other players visually (simplified prediction)
-            for(let id in players) {
-                if(id !== myId) {
-                    let p = players[id];
-                    p.x += (p.vx || 0);
-                    p.y += (p.vy || 0);
-                    if(p.vx) p.vx *= 0.97;
-                    if(p.vy) p.vy *= 0.97;
-                }
-            }
-        }
-
-        function draw() {
-            ctx.clearRect(0,0, canvas.width, canvas.height);
-            if(!map) return;
-
-            let scaleX = canvas.width / 400;
-            let scaleY = canvas.height / 800;
-
-            // Draw Hole
-            ctx.fillStyle = 'black';
-            ctx.beginPath();
-            ctx.arc(map.hole.x * scaleX, map.hole.y * scaleY, 15, 0, Math.PI*2);
-            ctx.fill();
-
-            // Draw Obstacles
-            ctx.fillStyle = '#c0392b';
-            map.obstacles.forEach(obs => {
-                ctx.fillRect(obs.x * scaleX, obs.y * scaleY, obs.w * scaleX, obs.h * scaleY);
             });
 
-            // Draw Players
-            for(let id in players) {
-                if(id !== myId) {
-                    let p = players[id];
-                    ctx.fillStyle = p.color || 'white';
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
-                    ctx.fill();
+            // Turn End Logic (Client triggers server when stopped)
+            if(isMoving && movingCount === 0) {
+                isMoving = false;
+                // Only the active player tells server "I am done"
+                if(currentTurnId === myId) {
+                    const me = players.find(p => p.id === myId);
+                    socket.emit('turn_complete', { roomId, x: me.x, y: me.y });
                 }
-            }
-
-            // Draw Me
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(myBall.x, myBall.y, 10, 0, Math.PI*2);
-            ctx.fill();
-            
-            // Drag Line
-            if(isDragging) {
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(myBall.x, myBall.y);
-                ctx.lineTo(dragStart.x, dragStart.y); // Visualizing pull
-                ctx.stroke();
             }
         }
 
-        function gameLoop() {
+        // --- RENDERING ---
+        function draw() {
+            // Clear Screen (Grey Background)
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if(!map) return;
+
+            // Save context for Virtual Coordinates scaling
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            // 1. Draw Board Background (Grass)
+            ctx.fillStyle = '#27ae60'; // Base Grass
+            ctx.fillRect(0, 0, VW, VH);
+            
+            // Checkerboard Pattern (Classic Golf Look)
+            ctx.fillStyle = '#2ecc71';
+            for(let r=0; r<20; r++) {
+                for(let c=0; c<10; c++) {
+                    if((r+c)%2===0) ctx.fillRect(c*40, r*40, 40, 40);
+                }
+            }
+
+            // 2. Draw Walls (3D Effect)
+            map.walls.forEach(w => {
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(w.x+5, w.y+5, w.w, w.h);
+                // Top
+                ctx.fillStyle = '#d35400'; // Brick Red
+                ctx.fillRect(w.x, w.y, w.w, w.h);
+                // Border
+                ctx.strokeStyle = '#a04000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(w.x, w.y, w.w, w.h);
+            });
+
+            // 3. Draw Hole
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath();
+            ctx.arc(map.hole.x, map.hole.y, map.hole.radius, 0, Math.PI*2);
+            ctx.fill();
+            // Hole Ring
+            ctx.strokeStyle = '#bdc3c7';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 4. Draw Players
+            players.forEach(p => {
+                if(p.finished) return;
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath();
+                ctx.arc(p.x+2, p.y+2, 10, 0, Math.PI*2);
+                ctx.fill();
+
+                // Ball
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Highlight (Shiny ball)
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                ctx.beginPath();
+                ctx.arc(p.x-3, p.y-3, 4, 0, Math.PI*2);
+                ctx.fill();
+
+                // Active Indicator
+                if(p.id === currentTurnId) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 14, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+            });
+
+            // 5. Draw Aiming (Only if my turn and dragging)
+            if(dragStart && currentTurnId === myId && !isMoving) {
+                const me = players.find(p => p.id === myId);
+                
+                let dx = dragStart.x - dragCurrent.x;
+                let dy = dragStart.y - dragCurrent.y;
+                
+                // A. Power Line (Drag Back)
+                ctx.beginPath();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 3;
+                ctx.moveTo(me.x, me.y);
+                ctx.lineTo(me.x - dx, me.y - dy); // Reverse visual for drag-back feel
+                ctx.stroke();
+
+                // B. Trajectory Line (Forward Prediction)
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.setLineDash([5, 5]); // Dashed line
+                ctx.moveTo(me.x, me.y);
+                ctx.lineTo(me.x + dx * 3, me.y + dy * 3); // Show projected path
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset
+            }
+
+            // Restore context (End of Virtual Coords)
+            ctx.restore();
+            
+            // Draw Borders to hide messy edges
+            ctx.fillStyle = '#222';
+            // Left
+            ctx.fillRect(0, 0, offsetX, canvas.height);
+            // Right
+            ctx.fillRect(offsetX + VW*scale, 0, offsetX, canvas.height);
+        }
+
+        function loop() {
             update();
             draw();
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(loop);
         }
     </script>
 </body>
