@@ -3,78 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mini Golf V2.1</title>
+    <title>Mini Golf V3.0</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Titan+One&display=swap');
         
-        body { margin: 0; background: #222; overflow: hidden; font-family: 'Fredoka One', cursive; touch-action: none; }
+        body { margin: 0; background: #111; overflow: hidden; font-family: 'Titan One', cursive; touch-action: none; }
         
-        /* UI OVERLAY */
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
         
-        .panel { background: rgba(0,0,0,0.6); color: white; padding: 10px 20px; border-radius: 20px; margin: 10px; text-align: center; backdrop-filter: blur(5px); }
-        #top-bar { display: flex; justify-content: space-between; align-items: center; }
-        #turn-indicator { font-size: 1.5rem; color: #f1c40f; text-shadow: 2px 2px 0 #000; }
+        .panel { background: #fff; color: #2ecc71; padding: 8px 20px; border-radius: 30px; margin: 15px; text-align: center; box-shadow: 0 4px 0 #bdc3c7; border: 2px solid #2ecc71; }
+        #top-bar { display: flex; justify-content: space-between; width: 100%; box-sizing: border-box; }
         
-        /* LOBBY STYLES */
+        #turn-indicator { font-size: 2rem; color: #f1c40f; text-shadow: 3px 3px 0 #000; -webkit-text-stroke: 1px black; transition: all 0.3s; }
+        
+        /* LOBBY */
         #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #27ae60; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
         
-        /* Form Elements */
-        input, select, button { padding: 15px; margin: 8px; font-size: 1.2rem; border-radius: 10px; border: none; width: 80%; max-width: 300px; font-family: inherit; box-sizing: border-box; }
-        
-        /* Specific Styles */
-        input { background: rgba(255,255,255,0.9); color: #333; }
-        select { background: rgba(255,255,255,0.9); color: #333; cursor: pointer; }
-        button { background: #f39c12; color: white; cursor: pointer; box-shadow: 0 4px 0 #d35400; transition: transform 0.1s; font-weight: bold; }
-        button:active { transform: translateY(4px); box-shadow: none; }
-        
-        /* Separator */
-        .divider { color: rgba(255,255,255,0.7); margin: 10px 0; font-size: 0.9rem; }
+        input, select, button { padding: 15px; margin: 8px; font-size: 1.1rem; border-radius: 12px; border: none; width: 85%; max-width: 320px; font-family: 'Titan One', cursive; text-align: center; }
+        input { background: #ecf0f1; color: #2c3e50; }
+        button { background: #f1c40f; color: #d35400; cursor: pointer; box-shadow: 0 5px 0 #c0392b; transition: transform 0.1s; }
+        button:active { transform: translateY(5px); box-shadow: none; }
         
         .hidden { display: none !important; }
-
         canvas { display: block; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
-        <h1 style="color:white; font-size: 3rem; text-shadow: 3px 3px 0 #000; margin-bottom: 20px;">GOLF PARTY</h1>
+        <h1 style="color:white; font-size: 3rem; text-shadow: 4px 4px 0 rgba(0,0,0,0.2);">MINI GOLF</h1>
+        <input type="text" id="pName" placeholder="YOUR NAME">
         
-        <input type="text" id="pName" placeholder="Your Nickname">
-        
-        <div id="start-buttons" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
-            
-            <div class="divider">--- CREATE ROOM ---</div>
-            
+        <div id="start-buttons" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+            <div style="margin: 10px; color:rgba(255,255,255,0.8);">--- CREATE ---</div>
             <select id="playerCount">
                 <option value="2">2 Players</option>
                 <option value="3">3 Players</option>
                 <option value="4">4 Players</option>
             </select>
+            <button onclick="createRoom()">CREATE PARTY</button>
             
-            <button onclick="createRoom()">Create Room</button>
-            
-            <div class="divider">--- OR JOIN ROOM ---</div>
-            
-            <input type="text" id="rCode" placeholder="Enter Room Code" style="text-transform:uppercase;">
-            <button onclick="joinRoom()" style="background: #3498db; box-shadow: 0 4px 0 #2980b9;">Join Room</button>
+            <div style="margin: 10px; color:rgba(255,255,255,0.8);">--- JOIN ---</div>
+            <input type="text" id="rCode" placeholder="ROOM CODE" style="text-transform:uppercase;">
+            <button onclick="joinRoom()" style="background:#3498db; color:white; box-shadow: 0 5px 0 #2980b9;">JOIN PARTY</button>
         </div>
 
         <div id="waiting-area" class="hidden" style="text-align: center;">
-            <h2 style="color:white; font-size: 2rem;">Room: <span id="room-display" style="color: #f1c40f;"></span></h2>
-            <div id="player-list" style="color:white; font-size: 1.4rem; margin: 20px 0;"></div>
-            <div style="color:rgba(255,255,255,0.7); animation: pulse 1s infinite;">Waiting for players...</div>
+            <h2 style="color:white;">ROOM CODE:<br><span id="room-display" style="font-size:3rem; color:#f1c40f;"></span></h2>
+            <div id="player-list" style="margin: 20px 0;"></div>
+            <div style="color:white; animation: pulse 1s infinite;">Waiting for friends...</div>
         </div>
     </div>
 
     <div id="ui-layer" class="hidden">
         <div id="top-bar">
-            <div class="panel" id="round-display">Round 1</div>
-            <div class="panel" id="score-display">Par 3</div>
+            <div class="panel" id="round-display">ROUND 1</div>
+            <div class="panel" id="score-display">PAR 3</div>
         </div>
-        <div style="text-align: center; margin-bottom: 50px;">
-            <div id="turn-indicator">Waiting...</div>
+        <div style="text-align: center; margin-bottom: 60px;">
+            <div id="turn-indicator">WAITING...</div>
         </div>
     </div>
 
@@ -86,97 +73,66 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // GAME CONSTANTS
-        const VW = 400; // Virtual Width
-        const VH = 800; // Virtual Height
+        const VW = 400; const VH = 800;
+        let scale = 1, offsetX = 0, offsetY = 0;
         
-        let scale = 1; 
-        let offsetX = 0; 
-        let offsetY = 0;
-
-        // STATE
-        let myId = null;
-        let roomId = null;
-        let players = [];
-        let map = null;
-        let currentTurnId = null;
+        let myId = null, roomId = null, players = [], map = null, currentTurnId = null;
         let isMoving = false;
-        
-        // PHYSICS
         let ball = { vx: 0, vy: 0 };
-        let friction = 0.96;
+        let dragStart = null, dragCurrent = null;
 
-        // INPUT
-        let dragStart = null;
-        let dragCurrent = null;
-
-        // --- SETUP & RESIZE ---
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            
-            // Calculate Scale to fit Virtual Aspect Ratio
             let scaleX = canvas.width / VW;
             let scaleY = canvas.height / VH;
-            scale = Math.min(scaleX, scaleY); // Fit within screen
-            
-            // Center the board
+            scale = Math.min(scaleX, scaleY);
             offsetX = (canvas.width - (VW * scale)) / 2;
             offsetY = (canvas.height - (VH * scale)) / 2;
         }
         window.addEventListener('resize', resize);
         resize();
 
-        // --- LOBBY LOGIC ---
         function createRoom() {
             const name = document.getElementById('pName').value.trim();
-            if(!name) return alert("Please enter a name!");
-            
-            // GET PLAYER COUNT
+            if(!name) return alert("Name required!");
             const count = document.getElementById('playerCount').value;
-            
-            socket.emit('create_room', { maxPlayers: count, name: name }); // Added name to create event if needed
-            // Note: We join immediately after creating, but for UI we wait
-            waitForLobby(name);
+            socket.emit('create_room', { maxPlayers: count });
+            waitForLobby();
         }
 
         function joinRoom() {
             const name = document.getElementById('pName').value.trim();
             const code = document.getElementById('rCode').value.toUpperCase();
-            
-            if(!name) return alert("Please enter a name!");
-            if(!code) return alert("Please enter a room code!");
-
+            if(!name || !code) return alert("Enter Name & Code!");
             roomId = code;
             socket.emit('join_room', { roomId: code, name: name });
-            waitForLobby(name);
+            waitForLobby();
         }
 
-        function waitForLobby(name) {
+        function waitForLobby() {
             document.getElementById('start-buttons').classList.add('hidden');
             document.getElementById('waiting-area').classList.remove('hidden');
-            document.getElementById('pName').blur(); // Hide keyboard
+            document.getElementById('pName').blur();
         }
 
         socket.on('room_created', (id) => { 
             roomId = id; 
-            document.getElementById('room-display').innerText = id; 
-            // After creating, the server expects us to join our own room
+            document.getElementById('room-display').innerText = id;
             const name = document.getElementById('pName').value;
             socket.emit('join_room', { roomId: id, name: name });
         });
         
         socket.on('update_lobby', (pList) => {
             document.getElementById('player-list').innerHTML = pList.map(p => `
-                <div style="background:rgba(0,0,0,0.3); padding:10px; margin:5px; border-radius:8px;">
-                    <span style="color:${p.color}">●</span> ${p.name}
+                <div style="background:white; color:${p.color}; padding:10px; margin:5px; border-radius:10px; display:inline-block; font-weight:bold;">
+                    ${p.name}
                 </div>`).join('');
         });
 
         socket.on('game_start', (data) => {
             document.getElementById('lobby').classList.add('hidden');
             document.getElementById('ui-layer').classList.remove('hidden');
-            
             myId = socket.id;
             map = data.map;
             players = data.players;
@@ -185,28 +141,16 @@
             requestAnimationFrame(loop);
         });
 
-        // --- GAME EVENTS ---
         socket.on('player_shot', (data) => {
             const p = players.find(pl => pl.id === data.id);
-            if(p) {
-                p.vx = data.vx;
-                p.vy = data.vy;
-                if(data.id === myId) { ball.vx = data.vx; ball.vy = data.vy; }
-                isMoving = true; 
-            }
+            if(p) { p.vx = data.vx; p.vy = data.vy; if(data.id === myId) { ball.vx = data.vx; ball.vy = data.vy; } isMoving = true; }
         });
 
-        socket.on('change_turn', (data) => {
-            currentTurnId = data.turnId;
-            players = data.players;
-            updateTurnUI();
-        });
+        socket.on('change_turn', (data) => { currentTurnId = data.turnId; players = data.players; updateTurnUI(); });
         
         socket.on('next_round', (data) => {
-            map = data.map;
-            players = data.players;
-            currentTurnId = data.turnId;
-            document.getElementById('round-display').innerText = "Round " + map.round;
+            map = data.map; players = data.players; currentTurnId = data.turnId;
+            document.getElementById('round-display').innerText = "ROUND " + map.round;
             isMoving = false;
             updateTurnUI();
         });
@@ -216,133 +160,74 @@
         function updateTurnUI() {
             const div = document.getElementById('turn-indicator');
             if(currentTurnId === myId) {
-                div.innerText = "⭐ YOUR TURN! ⭐";
-                div.style.color = "#f1c40f";
-                div.style.transform = "scale(1.1)";
+                div.innerText = "⭐ YOUR TURN ⭐"; div.style.color = "#f1c40f"; div.style.transform = "scale(1.2)";
             } else {
                 const p = players.find(pl => pl.id === currentTurnId);
-                div.innerText = `Waiting for ${p ? p.name : '...'}`;
-                div.style.color = "#ecf0f1";
-                div.style.transform = "scale(1)";
+                div.innerText = `WAITING FOR ${p ? p.name.toUpperCase() : '...'}`; div.style.color = "white"; div.style.transform = "scale(1)";
             }
         }
 
-        // --- INPUT (AIMING) ---
+        // INPUT
         canvas.addEventListener('touchstart', (e) => handleStart(e.touches[0]));
         canvas.addEventListener('mousedown', (e) => handleStart(e));
 
         function handleStart(e) {
             if(isMoving || currentTurnId !== myId) return;
-            const myPlayer = players.find(p => p.id === myId);
-            if(!myPlayer || myPlayer.finished) return;
-
+            const me = players.find(p => p.id === myId);
+            if(!me || me.finished) return;
             const cx = (e.clientX - offsetX) / scale;
             const cy = (e.clientY - offsetY) / scale;
-            
-            const dist = Math.hypot(cx - myPlayer.x, cy - myPlayer.y);
-            
-            if(dist < 80) { // Increased hit area for easier touch
-                dragStart = { x: cx, y: cy };
-                dragCurrent = { x: cx, y: cy };
-            }
+            if(Math.hypot(cx - me.x, cy - me.y) < 100) { dragStart = {x:cx, y:cy}; dragCurrent = {x:cx, y:cy}; }
         }
 
-        window.addEventListener('touchmove', (e) => handleMove(e.touches[0]));
-        window.addEventListener('mousemove', (e) => handleMove(e));
-
-        function handleMove(e) {
-            if(!dragStart) return;
-            dragCurrent = { 
-                x: (e.clientX - offsetX) / scale,
-                y: (e.clientY - offsetY) / scale 
-            };
-        }
+        window.addEventListener('touchmove', (e) => { if(dragStart) dragCurrent = { x:(e.touches[0].clientX-offsetX)/scale, y:(e.touches[0].clientY-offsetY)/scale }; });
+        window.addEventListener('mousemove', (e) => { if(dragStart) dragCurrent = { x:(e.clientX-offsetX)/scale, y:(e.clientY-offsetY)/scale }; });
 
         window.addEventListener('touchend', handleEnd);
         window.addEventListener('mouseup', handleEnd);
 
         function handleEnd() {
             if(!dragStart) return;
+            let dx = dragStart.x - dragCurrent.x; let dy = dragStart.y - dragCurrent.y;
+            let power = Math.hypot(dx, dy);
+            if(power > 150) { let r = 150/power; dx*=r; dy*=r; } // Cap power
             
-            let dx = dragStart.x - dragCurrent.x;
-            let dy = dragStart.y - dragCurrent.y;
-            
-            const power = Math.hypot(dx, dy);
-            const maxPower = 150; 
-            if(power > maxPower) {
-                const ratio = maxPower / power;
-                dx *= ratio;
-                dy *= ratio;
-            }
-
             if(power > 10) {
-                const speedMult = 0.15;
-                socket.emit('shoot', { roomId, vx: dx * speedMult, vy: dy * speedMult });
+                socket.emit('shoot', { roomId, vx: dx*0.15, vy: dy*0.15 });
             }
-            
             dragStart = null;
-            dragCurrent = null;
         }
 
-        // --- PHYSICS ENGINE ---
         function update() {
             if(!map) return;
-            
-            let movingCount = 0;
-
+            let moving = 0;
             players.forEach(p => {
-                if(p.finished) { p.x = -500; return; } 
-
+                if(p.finished) { p.x = -500; return; }
                 if(Math.abs(p.vx) > 0.05 || Math.abs(p.vy) > 0.05) {
-                    p.x += p.vx;
-                    p.y += p.vy;
-                    p.vx *= friction;
-                    p.vy *= friction;
-                    movingCount++;
-
-                    // Screen Bounds
-                    if(p.x < 10) { p.x = 10; p.vx *= -1; }
-                    if(p.x > VW-10) { p.x = VW-10; p.vx *= -1; }
-                    if(p.y < 10) { p.y = 10; p.vy *= -1; }
-                    if(p.y > VH-10) { p.y = VH-10; p.vy *= -1; }
-
-                    // Map Walls
+                    p.x += p.vx; p.y += p.vy;
+                    p.vx *= 0.96; p.vy *= 0.96;
+                    moving++;
+                    
+                    // Collision
+                    if(p.x < 10 || p.x > VW-10) { p.vx *= -1; p.x = p.x < 10 ? 12 : VW-12; }
+                    if(p.y < 10 || p.y > VH-10) { p.vy *= -1; p.y = p.y < 10 ? 12 : VH-12; }
+                    
                     map.walls.forEach(w => {
-                        if(p.x > w.x - 10 && p.x < w.x + w.w + 10 &&
-                           p.y > w.y - 10 && p.y < w.y + w.h + 10) {
-                            
-                            const cx = w.x + w.w/2;
-                            const cy = w.y + w.h/2;
-                            const dx = p.x - cx;
-                            const dy = p.y - cy;
-                            const aspect = w.w / w.h;
-
-                            if(Math.abs(dx) > Math.abs(dy) * aspect) {
-                                p.vx *= -1; 
-                                p.x += (dx > 0 ? 2 : -2);
-                            } else {
-                                p.vy *= -1; 
-                                p.y += (dy > 0 ? 2 : -2);
-                            }
+                        if(p.x > w.x-10 && p.x < w.x+w.w+10 && p.y > w.y-10 && p.y < w.y+w.h+10) {
+                             // Simple bounding box bounce
+                             let cx = w.x + w.w/2; let cy = w.y + w.h/2;
+                             if (Math.abs(p.x - cx) > Math.abs(p.y - cy) * (w.w/w.h)) { p.vx *= -1; } else { p.vy *= -1; }
                         }
                     });
 
-                    // Hole Detection
-                    const distHole = Math.hypot(p.x - map.hole.x, p.y - map.hole.y);
-                    if(distHole < map.hole.radius) {
-                        p.vx = 0; p.vy = 0;
-                        p.finished = true;
-                        if(p.id === myId) {
-                            socket.emit('hole_in', { roomId });
-                            socket.emit('turn_complete', { roomId, x: p.x, y: p.y });
-                        }
+                    if(Math.hypot(p.x - map.hole.x, p.y - map.hole.y) < map.hole.radius) {
+                        p.vx=0; p.vy=0; p.finished=true;
+                        if(p.id === myId) { socket.emit('hole_in', {roomId}); socket.emit('turn_complete', {roomId, x:p.x, y:p.y}); }
                     }
-                } else {
-                    p.vx = 0; p.vy = 0;
-                }
+                } else { p.vx=0; p.vy=0; }
             });
 
-            if(isMoving && movingCount === 0) {
+            if(isMoving && moving === 0) {
                 isMoving = false;
                 if(currentTurnId === myId) {
                     const me = players.find(p => p.id === myId);
@@ -351,112 +236,73 @@
             }
         }
 
-        // --- RENDERING ---
         function draw() {
-            ctx.fillStyle = '#2c3e50';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
+            ctx.fillStyle = '#111'; ctx.fillRect(0,0,canvas.width, canvas.height);
             if(!map) return;
-
+            
             ctx.save();
             ctx.translate(offsetX, offsetY);
             ctx.scale(scale, scale);
 
-            // Background
-            ctx.fillStyle = '#27ae60'; 
+            // GRASS
+            ctx.fillStyle = '#58B947'; 
             ctx.fillRect(0, 0, VW, VH);
-            ctx.fillStyle = '#2ecc71';
-            for(let r=0; r<20; r++) {
-                for(let c=0; c<10; c++) {
-                    if((r+c)%2===0) ctx.fillRect(c*40, r*40, 40, 40);
+            
+            // PATTERN (ARROWS)
+            ctx.fillStyle = 'rgba(0,0,0,0.05)';
+            for(let y=0; y<VH; y+=40) {
+                for(let x=0; x<VW; x+=40) {
+                    if((x+y)%80 === 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y); ctx.lineTo(x+10, y+10); ctx.lineTo(x+20, y);
+                        ctx.lineTo(x+10, y-10); ctx.fill();
+                    }
                 }
             }
 
-            // Walls
+            // WALLS
             map.walls.forEach(w => {
-                ctx.fillStyle = 'rgba(0,0,0,0.3)';
-                ctx.fillRect(w.x+5, w.y+5, w.w, w.h);
-                ctx.fillStyle = '#d35400'; 
-                ctx.fillRect(w.x, w.y, w.w, w.h);
-                ctx.strokeStyle = '#a04000';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(w.x, w.y, w.w, w.h);
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(w.x+4, w.y+6, w.w, w.h);
+                // Body
+                ctx.fillStyle = '#e67e22'; ctx.fillRect(w.x, w.y, w.w, w.h); // Orange
+                // Top Light
+                ctx.fillStyle = '#f39c12'; ctx.fillRect(w.x, w.y, w.w, w.h-5);
             });
 
-            // Hole
-            ctx.fillStyle = '#1a1a1a';
-            ctx.beginPath();
-            ctx.arc(map.hole.x, map.hole.y, map.hole.radius, 0, Math.PI*2);
-            ctx.fill();
-            ctx.strokeStyle = '#bdc3c7';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Players
+            // HOLE
+            ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.arc(map.hole.x, map.hole.y, 18, 0, Math.PI*2); ctx.fill();
+            
+            // PLAYERS
             players.forEach(p => {
                 if(p.finished) return;
-
-                ctx.fillStyle = 'rgba(0,0,0,0.4)';
-                ctx.beginPath();
-                ctx.arc(p.x+2, p.y+2, 10, 0, Math.PI*2);
-                ctx.fill();
-
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
-                ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(p.x+2, p.y+4, 9, 0, Math.PI*2); ctx.fill(); // Shadow
+                ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(p.x-3, p.y-3, 3, 0, Math.PI*2); ctx.fill();
                 
-                ctx.fillStyle = 'rgba(255,255,255,0.4)';
-                ctx.beginPath();
-                ctx.arc(p.x-3, p.y-3, 4, 0, Math.PI*2);
-                ctx.fill();
-
                 if(p.id === currentTurnId) {
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, 14, 0, Math.PI*2);
-                    ctx.stroke();
+                    ctx.strokeStyle = 'white'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI*2); ctx.stroke();
                 }
             });
 
-            // Aiming Lines
-            if(dragStart && currentTurnId === myId && !isMoving) {
+            // AIM LINE
+            if(dragStart && currentTurnId === myId) {
                 const me = players.find(p => p.id === myId);
-                let dx = dragStart.x - dragCurrent.x;
-                let dy = dragStart.y - dragCurrent.y;
+                let dx = dragStart.x - dragCurrent.x; let dy = dragStart.y - dragCurrent.y;
                 
-                // Power
-                ctx.beginPath();
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 3;
-                ctx.moveTo(me.x, me.y);
-                ctx.lineTo(me.x - dx, me.y - dy); 
-                ctx.stroke();
-
-                // Trajectory
-                ctx.beginPath();
-                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-                ctx.setLineDash([5, 5]); 
-                ctx.moveTo(me.x, me.y);
-                ctx.lineTo(me.x + dx * 3, me.y + dy * 3); 
-                ctx.stroke();
-                ctx.setLineDash([]); 
+                // Pull Line
+                ctx.beginPath(); ctx.strokeStyle = 'white'; ctx.lineWidth=4; 
+                ctx.moveTo(me.x, me.y); ctx.lineTo(me.x-dx, me.y-dy); ctx.stroke();
+                
+                // Trajectory (Dashed)
+                ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([5,5]);
+                ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + dx*3, me.y + dy*3); ctx.stroke(); ctx.setLineDash([]);
             }
 
             ctx.restore();
-            
-            // Borders
-            ctx.fillStyle = '#222';
-            ctx.fillRect(0, 0, offsetX, canvas.height);
-            ctx.fillRect(offsetX + VW*scale, 0, offsetX, canvas.height);
         }
 
-        function loop() {
-            update();
-            draw();
-            requestAnimationFrame(loop);
-        }
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
     </script>
 </body>
 </html>
