@@ -9,49 +9,61 @@ app.use(express.static('public'));
 
 let rooms = {};
 
-// CONFIG
-const VIRTUAL_WIDTH = 400;  // The game always thinks it's this wide
-const VIRTUAL_HEIGHT = 800; // And this tall
+const VW = 400;  
+const VH = 800; 
 
-// GRID BASED MAP GENERATOR
+// --- NEW MAP GENERATOR ---
 function generateMap(round) {
-    const cols = 10;
-    const rows = 20;
-    const cellW = VIRTUAL_WIDTH / cols;
-    const cellH = VIRTUAL_HEIGHT / rows;
-    
     let walls = [];
     
-    // 1. Add Borders
-    walls.push({x: 0, y: 0, w: VIRTUAL_WIDTH, h: 20}); // Top
-    walls.push({x: 0, y: VIRTUAL_HEIGHT-20, w: VIRTUAL_WIDTH, h: 20}); // Bottom
-    walls.push({x: 0, y: 0, w: 20, h: VIRTUAL_HEIGHT}); // Left
-    walls.push({x: VIRTUAL_WIDTH-20, y: 0, w: 20, h: VIRTUAL_HEIGHT}); // Right
+    // 1. Determine Difficulty
+    // Round 1 = Obstacles every 200px (Easy)
+    // Round 5 = Obstacles every 120px (Hard)
+    let spacing = Math.max(120, 220 - (round * 20)); 
+    
+    // 2. Borders (Keep ball inside)
+    walls.push({x: 0, y: 0, w: VW, h: 20}); // Top
+    walls.push({x: 0, y: VH-20, w: VW, h: 20}); // Bottom
+    walls.push({x: 0, y: 0, w: 20, h: VH}); // Left
+    walls.push({x: VW-20, y: 0, w: 20, h: VH}); // Right
 
-    // 2. Generate Random Obstacles (Rows)
-    // We skip top 3 rows (hole) and bottom 3 rows (start)
-    for(let r = 3; r < rows - 3; r++) {
-        // Randomly decide to place a wall pattern in this row
-        let pattern = Math.floor(Math.random() * 4); // 0=None, 1=Left, 2=Right, 3=Center
+    // 3. Generate Obstacles
+    // Start from y=150 (below hole) to y=650 (above start)
+    for(let y = 150; y < VH - 150; y += spacing) {
         
-        // Increase difficulty: Higher rounds = more complex patterns
-        if(round > 2 && Math.random() > 0.5) pattern = Math.floor(Math.random() * 5);
+        // Random Pattern
+        let type = Math.floor(Math.random() * 5);
+        
+        // Add some random offset so it doesn't look like a perfect grid
+        let rY = y + (Math.random() * 40 - 20); 
 
-        if(pattern === 1) { // Left Wall
-            walls.push({ x: 0, y: r*cellH, w: VIRTUAL_WIDTH * 0.4, h: 20 });
-        } else if (pattern === 2) { // Right Wall
-            walls.push({ x: VIRTUAL_WIDTH * 0.6, y: r*cellH, w: VIRTUAL_WIDTH * 0.4, h: 20 });
-        } else if (pattern === 3) { // Center Block
-            walls.push({ x: VIRTUAL_WIDTH * 0.3, y: r*cellH, w: VIRTUAL_WIDTH * 0.4, h: 20 });
-        } else if (pattern === 4) { // Split (Hard)
-            walls.push({ x: 0, y: r*cellH, w: VIRTUAL_WIDTH * 0.3, h: 20 });
-            walls.push({ x: VIRTUAL_WIDTH * 0.7, y: r*cellH, w: VIRTUAL_WIDTH * 0.3, h: 20 });
+        if (type === 0) { 
+            // The "Gate" (Gap in middle)
+            // Left block
+            walls.push({ x: 0, y: rY, w: VW * 0.35, h: 30 });
+            // Right block
+            walls.push({ x: VW * 0.65, y: rY, w: VW * 0.35, h: 30 });
+            
+        } else if (type === 1) { 
+            // The "Post" (One block in center)
+            walls.push({ x: VW/2 - 60, y: rY, w: 120, h: 30 });
+            
+        } else if (type === 2) {
+            // "The Split" (Gap on left and right)
+            walls.push({ x: VW * 0.3, y: rY, w: VW * 0.4, h: 30 });
+            
+        } else if (type === 3) {
+             // "Gnomes" (3 small squares)
+             walls.push({ x: VW*0.2, y: rY, w: 40, h: 40 });
+             walls.push({ x: VW*0.5 - 20, y: rY, w: 40, h: 40 });
+             walls.push({ x: VW*0.8 - 40, y: rY, w: 40, h: 40 });
         }
+        // Type 4 is an empty row (Free pass!)
     }
 
     return {
-        hole: { x: VIRTUAL_WIDTH/2, y: 80, radius: 18 },
-        start: { x: VIRTUAL_WIDTH/2, y: VIRTUAL_HEIGHT - 100 },
+        hole: { x: VW/2, y: 80, radius: 18 },
+        start: { x: VW/2, y: VH - 100 },
         walls: walls,
         round: round,
         par: 3 + Math.floor(round/2)
@@ -65,7 +77,7 @@ io.on('connection', (socket) => {
         const roomId = Math.random().toString(36).substring(7).toUpperCase();
         rooms[roomId] = {
             id: roomId,
-            players: [], // Array for turn order
+            players: [],
             config: { maxPlayers: parseInt(data.maxPlayers) },
             state: 'waiting', 
             turnIndex: 0,
@@ -81,23 +93,19 @@ io.on('connection', (socket) => {
             const newPlayer = {
                 id: socket.id,
                 name: data.name,
-                color: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6'][room.players.length], // Red, Blue, Yellow, Purple
-                x: 0, y: 0,
-                score: 0,
-                finished: false
+                color: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6'][room.players.length],
+                x: 0, y: 0, score: 0, finished: false
             };
             
             room.players.push(newPlayer);
             socket.join(data.roomId);
             io.to(data.roomId).emit('update_lobby', room.players);
 
-            // Start Game
             if (room.players.length === room.config.maxPlayers) {
                 room.state = 'playing';
-                room.map = generateMap(1);
+                room.map = generateMap(1); // Start Round 1
                 room.turnIndex = 0;
                 
-                // Set start positions
                 room.players.forEach(p => {
                     p.x = room.map.start.x;
                     p.y = room.map.start.y;
@@ -113,69 +121,45 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle Shot
     socket.on('shoot', (data) => {
         const room = rooms[data.roomId];
         if(!room) return;
-        
-        // Verify it is this player's turn
-        const currentPlayer = room.players[room.turnIndex];
-        if(currentPlayer.id !== socket.id) return; // Ignore if not your turn
-
-        // Broadcast the shot to everyone (Client calculates physics)
-        io.to(data.roomId).emit('player_shot', { 
-            id: socket.id, 
-            vx: data.vx, 
-            vy: data.vy 
-        });
+        io.to(data.roomId).emit('player_shot', { id: socket.id, vx: data.vx, vy: data.vy });
     });
 
-    // Player Turn Ended (Ball stopped)
     socket.on('turn_complete', (data) => {
         const room = rooms[data.roomId];
         if(!room) return;
 
-        // Update position on server
         const p = room.players.find(pl => pl.id === socket.id);
-        if(p) {
-            p.x = data.x;
-            p.y = data.y;
-        }
+        if(p) { p.x = data.x; p.y = data.y; }
 
-        // Logic to find next player
-        let originalTurn = room.turnIndex;
         let loopCount = 0;
-        
         do {
             room.turnIndex = (room.turnIndex + 1) % room.players.length;
             loopCount++;
         } while (room.players[room.turnIndex].finished && loopCount < room.players.length);
 
-        // Check if Round Over (Everyone finished)
-        const allFinished = room.players.every(p => p.finished);
-
-        if (allFinished) {
-            // Next Round Logic
-            room.players.forEach(p => p.finished = false); // Reset status
-            room.map = generateMap(room.map.round + 1);
-            room.turnIndex = 0;
-            
-            room.players.forEach(p => {
-                p.x = room.map.start.x;
-                p.y = room.map.start.y;
-            });
-
-            io.to(data.roomId).emit('next_round', {
-                map: room.map,
-                players: room.players,
-                turnId: room.players[0].id
-            });
-
+        if (room.players.every(p => p.finished)) {
+            // Next Round or Game Over
+            if(room.map.round >= 5) {
+                 io.to(data.roomId).emit('msg', "GAME OVER! Thanks for playing.");
+            } else {
+                room.players.forEach(p => p.finished = false);
+                room.map = generateMap(room.map.round + 1);
+                room.turnIndex = 0;
+                room.players.forEach(p => { p.x = room.map.start.x; p.y = room.map.start.y; });
+                
+                io.to(data.roomId).emit('next_round', {
+                    map: room.map,
+                    players: room.players,
+                    turnId: room.players[0].id
+                });
+            }
         } else {
-            // Next Turn
             io.to(data.roomId).emit('change_turn', {
                 turnId: room.players[room.turnIndex].id,
-                players: room.players // Sync positions
+                players: room.players
             });
         }
     });
@@ -183,14 +167,9 @@ io.on('connection', (socket) => {
     socket.on('hole_in', (data) => {
         const room = rooms[data.roomId];
         const p = room.players.find(pl => pl.id === socket.id);
-        if(p) {
-            p.finished = true;
-            p.score += 1; // You could add complex scoring here
-            io.to(data.roomId).emit('msg', `${p.name} finished!`);
-        }
+        if(p) { p.finished = true; p.score += 1; io.to(data.roomId).emit('msg', `${p.name} finished!`); }
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => { console.log(`Running on ${PORT}`); });
-                
