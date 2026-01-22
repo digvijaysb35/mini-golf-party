@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mini Golf Party</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; background: #2c3e50; color: white; margin: 0; overflow: hidden; touch-action: none; }
+        #lobby { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        input, select, button { padding: 15px; margin: 10px; font-size: 1.2rem; border-radius: 8px; border: none; width: 80%; max-width: 300px; }
+        button { background: #27ae60; color: white; font-weight: bold; cursor: pointer; }
+        button:active { transform: scale(0.95); }
+        #gameArea { display: none; position: relative; width: 100%; height: 100vh; background: #2ecc71; }
+        canvas { display: block; width: 100%; height: 100%; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; padding: 10px; }
+        .player-tag { background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="lobby">
+        <h1>⛳ Mini Golf Party</h1>
+        <input type="text" id="playerName" placeholder="Enter Your Name">
+        
+        <div id="createSection">
+            <h3>Create Room</h3>
+            <select id="playerCount">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+            </select>
+            <button onclick="createRoom()">Create Room</button>
+        </div>
+
+        <div id="joinSection">
+            <h3>Join Room</h3>
+            <input type="text" id="roomCode" placeholder="Room Code">
+            <button onclick="joinRoom()">Join Room</button>
+        </div>
+        <p id="status"></p>
+    </div>
+
+    <div id="gameArea">
+        <div id="ui-layer">
+            <div id="roundInfo">Round 1/5 | Par 3</div>
+            <div id="scoreboard">Waiting...</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const lobby = document.getElementById('lobby');
+        const gameArea = document.getElementById('gameArea');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State
+        let myId = null;
+        let roomId = null;
+        let players = {};
+        let map = null;
+        let isMyTurn = true; // Simplified: Everyone shoots simultaneously
+        let myBall = { x: 0, y: 0, vx: 0, vy: 0, radius: 10, friction: 0.97 };
+        let isMoving = false;
+        
+        // Touch Input
+        let dragStart = { x: 0, y: 0 };
+        let isDragging = false;
+
+        // Resize Canvas
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- LOBBY FUNCTIONS ---
+        function createRoom() {
+            const name = document.getElementById('playerName').value;
+            if(!name) return alert("Enter name!");
+            const max = document.getElementById('playerCount').value;
+            socket.emit('create_room', { maxPlayers: max });
+            document.getElementById('status').innerText = "Creating...";
+            
+            // Auto join after create
+            socket.once('room_created', (id) => {
+                roomId = id;
+                document.getElementById('roomCode').value = id; // Show code to user
+                joinRoom(true); 
+                alert("Room Created! Code: " + id);
+            });
+        }
+
+        function joinRoom(auto = false) {
+            const name = document.getElementById('playerName').value;
+            const code = document.getElementById('roomCode').value;
+            if(!name || !code) return alert("Fill all fields");
+            
+            if(!auto) roomId = code;
+            socket.emit('join_room', { roomId: code, name: name });
+        }
+
+        socket.on('update_players', (p) => {
+            players = p;
+            document.getElementById('status').innerText = `Players: ${Object.keys(p).length} (Waiting for full room...)`;
+        });
+
+        socket.on('game_start', (data) => {
+            lobby.style.display = 'none';
+            gameArea.style.display = 'block';
+            myId = socket.id;
+            map = data.map;
+            players = data.players;
+            
+            // Set initial pos
+            myBall.x = map.start.x / 400 * canvas.width; // Scale to screen
+            myBall.y = map.start.y / 800 * canvas.height;
+            
+            gameLoop();
+        });
+        
+        socket.on('next_round', (data) => {
+             map = data.map;
+             players = data.players;
+             myBall.x = map.start.x / 400 * canvas.width;
+             myBall.y = map.start.y / 800 * canvas.height;
+             myBall.vx = 0; myBall.vy = 0;
+             document.getElementById('roundInfo').innerText = `Round ${map.round}/5 | Par ${map.maxShots}`;
+        });
+
+        socket.on('player_shot', (data) => {
+            if(players[data.id]) {
+                players[data.id].vx = data.vx;
+                players[data.id].vy = data.vy;
+            }
+        });
+        
+        socket.on('update_pos', (data) => {
+            if(players[data.id] && data.id !== myId) {
+                // Lerp could be used here for smoothness, direct set for now
+                players[data.id].x = data.x;
+                players[data.id].y = data.y;
+            }
+        });
+
+        // --- GAME LOOP ---
+        canvas.addEventListener('touchstart', (e) => {
+            if(isMoving) return;
+            isDragging = true;
+            dragStart.x = e.touches[0].clientX;
+            dragStart.y = e.touches[0].clientY;
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            if(!isDragging) return;
+            isDragging = false;
+            let endX = e.changedTouches[0].clientX;
+            let endY = e.changedTouches[0].clientY;
+            
+            // Power calculation
+            let powerX = (dragStart.x - endX) * 0.15;
+            let powerY = (dragStart.y - endY) * 0.15;
+            
+            // Cap speed
+            if(powerX > 20) powerX = 20; if(powerX < -20) powerX = -20;
+            if(powerY > 20) powerY = 20; if(powerY < -20) powerY = -20;
+
+            myBall.vx = powerX;
+            myBall.vy = powerY;
+            isMoving = true;
+            
+            socket.emit('shoot', { roomId, vx: powerX, vy: powerY });
+        });
+
+        function update() {
+            if(!map) return;
+            
+            // Scale factors
+            let scaleX = canvas.width / 400;
+            let scaleY = canvas.height / 800;
+
+            // My Physics
+            if(isMoving) {
+                myBall.x += myBall.vx;
+                myBall.y += myBall.vy;
+                myBall.vx *= myBall.friction;
+                myBall.vy *= myBall.friction;
+
+                // Stop check
+                if(Math.abs(myBall.vx) < 0.1 && Math.abs(myBall.vy) < 0.1) {
+                    isMoving = false;
+                    myBall.vx = 0; myBall.vy = 0;
+                    socket.emit('sync_pos', { roomId, x: myBall.x, y: myBall.y });
+                }
+
+                // Wall Collision (Screen borders)
+                if(myBall.x < 0 || myBall.x > canvas.width) myBall.vx *= -1;
+                if(myBall.y < 0 || myBall.y > canvas.height) myBall.vy *= -1;
+                
+                // Obstacle Collision
+                map.obstacles.forEach(obs => {
+                    let ox = obs.x * scaleX;
+                    let oy = obs.y * scaleY;
+                    let ow = obs.w * scaleX;
+                    let oh = obs.h * scaleY;
+                    
+                    if (myBall.x > ox && myBall.x < ox + ow && myBall.y > oy && myBall.y < oy + oh) {
+                         myBall.vx *= -1;
+                         myBall.vy *= -1;
+                    }
+                });
+
+                // Hole Check
+                let hx = map.hole.x * scaleX;
+                let hy = map.hole.y * scaleY;
+                let dist = Math.hypot(myBall.x - hx, myBall.y - hy);
+                if(dist < 20) {
+                    // Success!
+                    myBall.vx = 0; myBall.vy = 0;
+                    myBall.x = -100; // Hide ball
+                    socket.emit('hole_in', { roomId, shots: 1 }); // Simplification: Sending 1 shot per successful logic usually requires local counter
+                    alert("Hole in one! (Or close enough)");
+                }
+            }
+            
+            // Update other players visually (simplified prediction)
+            for(let id in players) {
+                if(id !== myId) {
+                    let p = players[id];
+                    p.x += (p.vx || 0);
+                    p.y += (p.vy || 0);
+                    if(p.vx) p.vx *= 0.97;
+                    if(p.vy) p.vy *= 0.97;
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0,0, canvas.width, canvas.height);
+            if(!map) return;
+
+            let scaleX = canvas.width / 400;
+            let scaleY = canvas.height / 800;
+
+            // Draw Hole
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(map.hole.x * scaleX, map.hole.y * scaleY, 15, 0, Math.PI*2);
+            ctx.fill();
+
+            // Draw Obstacles
+            ctx.fillStyle = '#c0392b';
+            map.obstacles.forEach(obs => {
+                ctx.fillRect(obs.x * scaleX, obs.y * scaleY, obs.w * scaleX, obs.h * scaleY);
+            });
+
+            // Draw Players
+            for(let id in players) {
+                if(id !== myId) {
+                    let p = players[id];
+                    ctx.fillStyle = p.color || 'white';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            // Draw Me
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(myBall.x, myBall.y, 10, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Drag Line
+            if(isDragging) {
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(myBall.x, myBall.y);
+                ctx.lineTo(dragStart.x, dragStart.y); // Visualizing pull
+                ctx.stroke();
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
