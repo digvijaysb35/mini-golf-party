@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mini Golf Pro</title>
+    <title>Mini Golf V4 (Physics Update)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Titan+One&display=swap');
         
         body { margin: 0; background: #111; overflow: hidden; font-family: 'Titan One', cursive; touch-action: none; user-select: none; -webkit-user-select: none; }
         
-        /* UI LAYER */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
         
         .panel { background: #fff; color: #2ecc71; padding: 8px 20px; border-radius: 30px; margin: 15px; text-align: center; box-shadow: 0 4px 0 #bdc3c7; border: 2px solid #2ecc71; }
@@ -17,7 +16,6 @@
         
         #turn-indicator { font-size: 2rem; color: #f1c40f; text-shadow: 3px 3px 0 #000; -webkit-text-stroke: 1px black; transition: all 0.3s; margin-bottom: 80px; }
         
-        /* LOBBY */
         #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #27ae60; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; pointer-events: auto; }
         
         input, select, button { padding: 15px; margin: 8px; font-size: 1.1rem; border-radius: 12px; border: none; width: 85%; max-width: 320px; font-family: 'Titan One', cursive; text-align: center; outline: none; }
@@ -34,21 +32,12 @@
     <div id="lobby">
         <h1 style="color:white; font-size: 3rem; text-shadow: 4px 4px 0 rgba(0,0,0,0.2);">MINI GOLF</h1>
         <input type="text" id="pName" placeholder="YOUR NAME">
-        
         <div id="start-buttons" style="width:100%; display:flex; flex-direction:column; align-items:center;">
-            <div style="margin: 10px; color:rgba(255,255,255,0.8);">--- CREATE ---</div>
-            <select id="playerCount">
-                <option value="2">2 Players</option>
-                <option value="3">3 Players</option>
-                <option value="4">4 Players</option>
-            </select>
+            <select id="playerCount"><option value="2">2 Players</option><option value="3">3 Players</option><option value="4">4 Players</option></select>
             <button onclick="createRoom()">CREATE PARTY</button>
-            
-            <div style="margin: 10px; color:rgba(255,255,255,0.8);">--- JOIN ---</div>
-            <input type="text" id="rCode" placeholder="ROOM CODE" style="text-transform:uppercase;">
+            <input type="text" id="rCode" placeholder="ROOM CODE" style="text-transform:uppercase; margin-top:20px;">
             <button onclick="joinRoom()" style="background:#3498db; color:white; box-shadow: 0 5px 0 #2980b9;">JOIN PARTY</button>
         </div>
-
         <div id="waiting-area" class="hidden" style="text-align: center;">
             <h2 style="color:white;">ROOM CODE:<br><span id="room-display" style="font-size:3rem; color:#f1c40f;"></span></h2>
             <div id="player-list" style="margin: 20px 0;"></div>
@@ -74,20 +63,12 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // CONSTANTS
-        const VW = 400; 
-        const VH = 800;
-        const BALL_RADIUS = 9;
-        
+        const VW = 400, VH = 800, BALL_RADIUS = 9;
         let scale = 1, offsetX = 0, offsetY = 0;
         let myId = null, roomId = null, players = [], map = null, currentTurnId = null;
         let isMoving = false;
-        
-        // INPUT STATE
-        let dragStart = null;   // Screen Coordinates
-        let dragCurrent = null; // Screen Coordinates
+        let dragStart = null, dragCurrent = null;
 
-        // --- RESIZE LOGIC ---
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -100,15 +81,13 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // --- LOBBY LOGIC ---
+        // --- LOBBY ---
         function createRoom() {
             const name = document.getElementById('pName').value.trim();
             if(!name) return alert("Name required!");
-            const count = document.getElementById('playerCount').value;
-            socket.emit('create_room', { maxPlayers: count });
+            socket.emit('create_room', { maxPlayers: document.getElementById('playerCount').value });
             waitForLobby();
         }
-
         function joinRoom() {
             const name = document.getElementById('pName').value.trim();
             const code = document.getElementById('rCode').value.toUpperCase();
@@ -117,53 +96,32 @@
             socket.emit('join_room', { roomId: code, name: name });
             waitForLobby();
         }
-
         function waitForLobby() {
             document.getElementById('start-buttons').classList.add('hidden');
             document.getElementById('waiting-area').classList.remove('hidden');
-            document.getElementById('pName').blur();
         }
 
-        socket.on('room_created', (id) => { 
-            roomId = id; 
-            document.getElementById('room-display').innerText = id;
-            const name = document.getElementById('pName').value;
-            socket.emit('join_room', { roomId: id, name: name });
-        });
-        
+        socket.on('room_created', (id) => { roomId = id; document.getElementById('room-display').innerText = id; socket.emit('join_room', { roomId: id, name: document.getElementById('pName').value }); });
         socket.on('update_lobby', (pList) => {
-            document.getElementById('player-list').innerHTML = pList.map(p => `
-                <div style="background:white; color:${p.color}; padding:10px; margin:5px; border-radius:10px; display:inline-block; font-weight:bold;">
-                    ${p.name}
-                </div>`).join('');
+            document.getElementById('player-list').innerHTML = pList.map(p => `<div style="background:white; color:${p.color}; padding:10px; margin:5px; border-radius:10px; display:inline-block; font-weight:bold;">${p.name}</div>`).join('');
         });
-
         socket.on('game_start', (data) => {
             document.getElementById('lobby').classList.add('hidden');
             document.getElementById('ui-layer').classList.remove('hidden');
-            myId = socket.id;
-            map = data.map;
-            players = data.players;
-            currentTurnId = data.turnId;
-            updateTurnUI();
-            requestAnimationFrame(loop);
+            myId = socket.id; map = data.map; players = data.players; currentTurnId = data.turnId;
+            updateTurnUI(); requestAnimationFrame(loop);
         });
-
         socket.on('player_shot', (data) => {
             const p = players.find(pl => pl.id === data.id);
             if(p) { p.vx = data.vx; p.vy = data.vy; isMoving = true; }
         });
-
         socket.on('change_turn', (data) => { currentTurnId = data.turnId; players = data.players; updateTurnUI(); });
-        
         socket.on('next_round', (data) => {
             map = data.map; players = data.players; currentTurnId = data.turnId;
             document.getElementById('round-display').innerText = "ROUND " + map.round;
-            isMoving = false;
-            updateTurnUI();
+            isMoving = false; updateTurnUI();
         });
-
-        socket.on('msg', (msg) => { console.log(msg); });
+        socket.on('msg', (msg) => console.log(msg));
 
         function updateTurnUI() {
             const div = document.getElementById('turn-indicator');
@@ -175,138 +133,112 @@
             }
         }
 
-        // --- NEW INPUT SYSTEM (Global Drag) ---
-        canvas.addEventListener('touchstart', handleStart);
-        canvas.addEventListener('mousedown', handleStart);
-
+        // --- INPUT ---
+        canvas.addEventListener('touchstart', handleStart); canvas.addEventListener('mousedown', handleStart);
         function handleStart(e) {
             if(isMoving || currentTurnId !== myId) return;
             const me = players.find(p => p.id === myId);
             if(!me || me.finished) return;
-
-            // Get screen coordinates
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-            // Start drag from ANYWHERE
-            dragStart = { x: clientX, y: clientY };
-            dragCurrent = { x: clientX, y: clientY };
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const cy = e.touches ? e.touches[0].clientY : e.clientY;
+            dragStart = { x: cx, y: cy }; dragCurrent = { x: cx, y: cy };
         }
-
-        window.addEventListener('touchmove', handleMove);
-        window.addEventListener('mousemove', handleMove);
-
-        function handleMove(e) {
-            if(!dragStart) return;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            dragCurrent = { x: clientX, y: clientY };
-        }
-
-        window.addEventListener('touchend', handleEnd);
-        window.addEventListener('mouseup', handleEnd);
-
+        window.addEventListener('touchmove', (e) => { if(dragStart) dragCurrent = { x: e.touches ? e.touches[0].clientX : e.clientX, y: e.touches ? e.touches[0].clientY : e.clientY }; });
+        window.addEventListener('mousemove', (e) => { if(dragStart) dragCurrent = { x: e.clientX, y: e.clientY }; });
+        window.addEventListener('touchend', handleEnd); window.addEventListener('mouseup', handleEnd);
         function handleEnd() {
             if(!dragStart) return;
-            
-            // Calculate Vector in Screen Pixels
-            let dx = dragStart.x - dragCurrent.x;
-            let dy = dragStart.y - dragCurrent.y;
-            
-            // Convert to Game Units (Scale down)
-            // We use a divisor to make the pull feel "heavy"
-            dx = dx / scale;
-            dy = dy / scale;
-
+            let dx = (dragStart.x - dragCurrent.x)/scale; let dy = (dragStart.y - dragCurrent.y)/scale;
             let power = Math.hypot(dx, dy);
-            
-            // Cap Max Power
-            if(power > 150) { 
-                let r = 150/power; 
-                dx*=r; dy*=r; 
-            }
-            
-            // Deadzone (Prevent accidental tiny shots)
-            if(power > 15) {
-                socket.emit('shoot', { roomId, vx: dx*0.15, vy: dy*0.15 });
-            }
+            if(power > 150) { let r = 150/power; dx*=r; dy*=r; }
+            if(power > 15) { socket.emit('shoot', { roomId, vx: dx*0.18, vy: dy*0.18 }); }
             dragStart = null;
         }
 
-        // --- NEW PHYSICS ENGINE (Anti-Stuck) ---
+        // --- NEW PHYSICS ENGINE (Collision + Hole Fix) ---
         function update() {
             if(!map) return;
             let movingCount = 0;
             
+            // 1. BALL TO BALL COLLISION
+            for(let i=0; i<players.length; i++) {
+                for(let j=i+1; j<players.length; j++) {
+                    let p1 = players[i]; let p2 = players[j];
+                    if(p1.finished || p2.finished) continue;
+
+                    let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                    let dist = Math.hypot(dx, dy);
+
+                    if(dist < BALL_RADIUS * 2) {
+                        // Resolve Overlap
+                        let overlap = (BALL_RADIUS * 2 - dist) / 2;
+                        let nx = dx / dist; let ny = dy / dist;
+                        p1.x -= nx * overlap; p1.y -= ny * overlap;
+                        p2.x += nx * overlap; p2.y += ny * overlap;
+
+                        // Elastic Bounce
+                        let tx = -ny; let ty = nx;
+                        let dpTan1 = p1.vx * tx + p1.vy * ty; let dpTan2 = p2.vx * tx + p2.vy * ty;
+                        let dpNorm1 = p1.vx * nx + p1.vy * ny; let dpNorm2 = p2.vx * nx + p2.vy * ny;
+                        
+                        // Swap momentums (equal mass)
+                        let m1 = dpNorm2; let m2 = dpNorm1;
+
+                        p1.vx = tx * dpTan1 + nx * m1; p1.vy = ty * dpTan1 + ny * m1;
+                        p2.vx = tx * dpTan2 + nx * m2; p2.vy = ty * dpTan2 + ny * m2;
+
+                        // Wake up balls
+                        if(Math.abs(p1.vx) > 0.1 || Math.abs(p1.vy) > 0.1) isMoving = true; 
+                    }
+                }
+            }
+
+            // 2. MOVEMENT & WALLS
             players.forEach(p => {
                 if(p.finished) { p.x = -500; return; }
                 
-                // Only process physics if moving
+                // Wake up check (if hit by another ball)
                 if(Math.abs(p.vx) > 0.05 || Math.abs(p.vy) > 0.05) {
                     movingCount++;
+                    p.x += p.vx; p.y += p.vy;
+                    p.vx *= 0.97; p.vy *= 0.97; // Friction
+
+                    // Borders (Teleport out to prevent sticking)
+                    if(p.x < BALL_RADIUS) { p.x = BALL_RADIUS; p.vx = Math.abs(p.vx)*0.8; }
+                    if(p.x > VW - BALL_RADIUS) { p.x = VW - BALL_RADIUS; p.vx = -Math.abs(p.vx)*0.8; }
+                    if(p.y < BALL_RADIUS) { p.y = BALL_RADIUS; p.vy = Math.abs(p.vy)*0.8; }
+                    if(p.y > VH - BALL_RADIUS) { p.y = VH - BALL_RADIUS; p.vy = -Math.abs(p.vy)*0.8; }
                     
-                    // 1. Move
-                    p.x += p.vx;
-                    p.y += p.vy;
-                    
-                    // 2. Friction
-                    p.vx *= 0.96;
-                    p.vy *= 0.96;
-                    
-                    // 3. Wall Collisions (Screen Borders) - Push Out Logic
-                    if(p.x < BALL_RADIUS) { 
-                        p.x = BALL_RADIUS; // Teleport out
-                        p.vx = Math.abs(p.vx); // Force direction right
-                    }
-                    if(p.x > VW - BALL_RADIUS) { 
-                        p.x = VW - BALL_RADIUS; 
-                        p.vx = -Math.abs(p.vx); 
-                    }
-                    if(p.y < BALL_RADIUS) { 
-                        p.y = BALL_RADIUS; 
-                        p.vy = Math.abs(p.vy); 
-                    }
-                    if(p.y > VH - BALL_RADIUS) { 
-                        p.y = VH - BALL_RADIUS; 
-                        p.vy = -Math.abs(p.vy); 
-                    }
-                    
-                    // 4. Obstacle Collisions (AABB Resolve)
+                    // Obstacles
                     map.walls.forEach(w => {
-                        // Check Overlap
-                        if(p.x + BALL_RADIUS > w.x && p.x - BALL_RADIUS < w.x + w.w &&
-                           p.y + BALL_RADIUS > w.y && p.y - BALL_RADIUS < w.y + w.h) {
-                            
-                            // Calculate how far inside we are on each side
-                            let overlapLeft = (p.x + BALL_RADIUS) - w.x;
-                            let overlapRight = (w.x + w.w) - (p.x - BALL_RADIUS);
-                            let overlapTop = (p.y + BALL_RADIUS) - w.y;
-                            let overlapBottom = (w.y + w.h) - (p.y - BALL_RADIUS);
-                            
-                            // Find smallest overlap (that's the side we hit)
-                            let minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-                            
-                            if(minOverlap === overlapLeft) {
-                                p.x = w.x - BALL_RADIUS; // Push out Left
-                                p.vx = -Math.abs(p.vx);
-                            } else if(minOverlap === overlapRight) {
-                                p.x = w.x + w.w + BALL_RADIUS; // Push out Right
-                                p.vx = Math.abs(p.vx);
-                            } else if(minOverlap === overlapTop) {
-                                p.y = w.y - BALL_RADIUS; // Push out Top
-                                p.vy = -Math.abs(p.vy);
-                            } else if(minOverlap === overlapBottom) {
-                                p.y = w.y + w.h + BALL_RADIUS; // Push out Bottom
-                                p.vy = Math.abs(p.vy);
-                            }
+                        if(p.x+BALL_RADIUS > w.x && p.x-BALL_RADIUS < w.x+w.w && p.y+BALL_RADIUS > w.y && p.y-BALL_RADIUS < w.y+w.h) {
+                            let l = (p.x+BALL_RADIUS)-w.x; let r = (w.x+w.w)-(p.x-BALL_RADIUS);
+                            let t = (p.y+BALL_RADIUS)-w.y; let b = (w.y+w.h)-(p.y-BALL_RADIUS);
+                            let min = Math.min(l,r,t,b);
+                            if(min===l) { p.x = w.x-BALL_RADIUS; p.vx = -Math.abs(p.vx); }
+                            else if(min===r) { p.x = w.x+w.w+BALL_RADIUS; p.vx = Math.abs(p.vx); }
+                            else if(min===t) { p.y = w.y-BALL_RADIUS; p.vy = -Math.abs(p.vy); }
+                            else { p.y = w.y+w.h+BALL_RADIUS; p.vy = Math.abs(p.vy); }
                         }
                     });
 
-                    // 5. Hole Detection
-                    if(Math.hypot(p.x - map.hole.x, p.y - map.hole.y) < map.hole.radius) {
-                        p.vx=0; p.vy=0; p.finished=true;
-                        if(p.id === myId) { 
-                            socket.emit('turn_complete', {roomId, x:p.x, y:p.y, holeIn: true}); 
+                    // 3. IMPROVED HOLE CHECK
+                    // Distance check is now radius + hole_radius (generous)
+                    let distToHole = Math.hypot(p.x - map.hole.x, p.y - map.hole.y);
+                    if(distToHole < (map.hole.radius + 5)) {
+                        // Check Speed - if too fast, it jumps over!
+                        let speed = Math.hypot(p.vx, p.vy);
+                        if(speed < 12) { // 12 is pretty fast, so this is forgiving
+                            // Suck it in
+                            p.vx *= 0.5; p.vy *= 0.5;
+                            p.x += (map.hole.x - p.x) * 0.2; // Move toward center
+                            p.y += (map.hole.y - p.y) * 0.2;
+                            
+                            // If close enough center, finish
+                            if(distToHole < 10) {
+                                p.vx=0; p.vy=0; p.finished=true;
+                                if(p.id === myId) { socket.emit('turn_complete', {roomId, x:p.x, y:p.y, holeIn: true}); }
+                            }
                         }
                     }
                 } else {
@@ -318,89 +250,49 @@
                 isMoving = false;
                 if(currentTurnId === myId) {
                     const me = players.find(p => p.id === myId);
-                    if(!me.finished) {
-                         socket.emit('turn_complete', { roomId, x: me.x, y: me.y, holeIn: false });
-                    }
+                    if(!me.finished) { socket.emit('turn_complete', { roomId, x: me.x, y: me.y, holeIn: false }); }
                 }
             }
         }
 
-        // --- DRAWING ---
+        // --- DRAW ---
         function draw() {
             ctx.fillStyle = '#111'; ctx.fillRect(0,0,canvas.width, canvas.height);
             if(!map) return;
-            
-            ctx.save();
-            ctx.translate(offsetX, offsetY);
-            ctx.scale(scale, scale);
+            ctx.save(); ctx.translate(offsetX, offsetY); ctx.scale(scale, scale);
 
-            // GRASS & PATTERN
+            // Floor
             ctx.fillStyle = '#58B947'; ctx.fillRect(0, 0, VW, VH);
             ctx.fillStyle = 'rgba(0,0,0,0.05)';
-            for(let y=0; y<VH; y+=40) {
-                for(let x=0; x<VW; x+=40) {
-                    if((x+y)%80 === 0) {
-                        ctx.beginPath();
-                        ctx.moveTo(x, y); ctx.lineTo(x+10, y+10); ctx.lineTo(x+20, y);
-                        ctx.lineTo(x+10, y-10); ctx.fill();
-                    }
-                }
-            }
+            for(let y=0; y<VH; y+=40) for(let x=0; x<VW; x+=40) if((x+y)%80===0) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+10,y+10); ctx.lineTo(x+20,y); ctx.lineTo(x+10,y-10); ctx.fill(); }
 
-            // WALLS
-            map.walls.forEach(w => {
-                ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(w.x+4, w.y+6, w.w, w.h);
-                ctx.fillStyle = '#e67e22'; ctx.fillRect(w.x, w.y, w.w, w.h); 
-                ctx.fillStyle = '#f39c12'; ctx.fillRect(w.x, w.y, w.w, w.h-5);
+            // Objects
+            map.walls.forEach(w => { 
+                ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.fillRect(w.x+4,w.y+6,w.w,w.h); 
+                ctx.fillStyle='#e67e22'; ctx.fillRect(w.x,w.y,w.w,w.h); 
+                ctx.fillStyle='#f39c12'; ctx.fillRect(w.x,w.y,w.w,w.h-5); 
             });
-
-            // HOLE
             ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.arc(map.hole.x, map.hole.y, 20, 0, Math.PI*2); ctx.fill();
-            
-            // PLAYERS
+
+            // Players
             players.forEach(p => {
                 if(p.finished) return;
-                ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(p.x+2, p.y+4, BALL_RADIUS, 0, Math.PI*2); ctx.fill(); 
-                ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, BALL_RADIUS, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(p.x-3, p.y-3, 3, 0, Math.PI*2); ctx.fill();
-                
-                if(p.id === currentTurnId) {
-                    ctx.strokeStyle = 'white'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI*2); ctx.stroke();
-                }
+                ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(p.x+2,p.y+4,BALL_RADIUS,0,Math.PI*2); ctx.fill(); 
+                ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,BALL_RADIUS,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(p.x-3,p.y-3,3,0,Math.PI*2); ctx.fill();
+                if(p.id === currentTurnId) { ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x,p.y,14,0,Math.PI*2); ctx.stroke(); }
             });
 
-            // AIM LINE (CALCULATED FROM DRAG DELTA)
+            // Aim
             if(dragStart && currentTurnId === myId) {
                 const me = players.find(p => p.id === myId);
-                
-                // Calculate Drag Vector (Screen Pixels)
-                let sdx = dragStart.x - dragCurrent.x;
-                let sdy = dragStart.y - dragCurrent.y;
-                
-                // Convert to Game Units for Aim Line length
-                let gdx = sdx / scale;
-                let gdy = sdy / scale;
-
-                // Visual Cap
-                let power = Math.hypot(gdx, gdy);
-                if(power > 150) { let r = 150/power; gdx*=r; gdy*=r; }
-
-                // 1. Pull Line (From Ball backwards)
-                ctx.beginPath(); ctx.strokeStyle = 'white'; ctx.lineWidth=4; 
-                ctx.moveTo(me.x, me.y); 
-                ctx.lineTo(me.x - gdx, me.y - gdy); 
-                ctx.stroke();
-                
-                // 2. Prediction Line (From Ball forwards)
-                ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([5,5]);
-                ctx.moveTo(me.x, me.y); 
-                ctx.lineTo(me.x + gdx*3, me.y + gdy*3); 
-                ctx.stroke(); ctx.setLineDash([]);
+                let dx = (dragStart.x-dragCurrent.x)/scale; let dy = (dragStart.y-dragCurrent.y)/scale;
+                let power = Math.hypot(dx,dy); if(power>150){let r=150/power; dx*=r; dy*=r;}
+                ctx.beginPath(); ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.moveTo(me.x,me.y); ctx.lineTo(me.x-dx,me.y-dy); ctx.stroke();
+                ctx.beginPath(); ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.setLineDash([5,5]); ctx.moveTo(me.x,me.y); ctx.lineTo(me.x+dx*3,me.y+dy*3); ctx.stroke(); ctx.setLineDash([]);
             }
-
             ctx.restore();
         }
-
         function loop() { update(); draw(); requestAnimationFrame(loop); }
     </script>
 </body>
